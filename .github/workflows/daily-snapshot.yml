@@ -2,7 +2,7 @@ name: 법령 원문 일일 재확인
 
 on:
   schedule:
-    - cron: "0 19 * * *"
+    - cron: "0 4 * * *"      # 한국시간 오후 1시 (PC가 켜져 있을 시간대)
   workflow_dispatch:
 
 permissions:
@@ -10,7 +10,7 @@ permissions:
 
 jobs:
   snapshot:
-    runs-on: ubuntu-latest
+    runs-on: self-hosted
     steps:
       - uses: actions/checkout@v4
 
@@ -20,24 +20,20 @@ jobs:
 
       - name: 접속 진단
         continue-on-error: true
+        shell: bash
         run: |
-          URL="DRF/lawSearch.do?OC=${{ secrets.LAW_OC }}&target=law&type=JSON&query=%EA%B7%BC%EB%A1%9C%EA%B8%B0%EC%A4%80%EB%B2%95"
-          echo "--- DNS ---"
-          getent hosts www.law.go.kr || echo "DNS 실패"
-          echo "--- HTTPS ---"
-          curl -sS -m 20 -o /tmp/a.json -w "status=%{http_code} time=%{time_total}s\n" "https://www.law.go.kr/$URL" ; echo "exit=$?"
+          curl -sS -m 20 -o /tmp/a.json -w "status=%{http_code} time=%{time_total}s\n" "https://www.law.go.kr/DRF/lawSearch.do?OC=${{ secrets.LAW_OC }}&target=law&type=JSON&query=%EA%B7%BC%EB%A1%9C%EA%B8%B0%EC%A4%80%EB%B2%95" || echo "연결 실패"
           head -c 300 /tmp/a.json ; echo
-          echo "--- HTTP ---"
-          curl -sS -m 20 -o /tmp/b.json -w "status=%{http_code} time=%{time_total}s\n" "http://www.law.go.kr/$URL" ; echo "exit=$?"
-          head -c 300 /tmp/b.json ; echo
 
       - name: 조문 원문 재확인
+        shell: bash
         env:
           LAW_OC: ${{ secrets.LAW_OC }}
         run: node scripts/snapshot.mjs
 
       - name: 변경사항 커밋
         if: always()
+        shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
