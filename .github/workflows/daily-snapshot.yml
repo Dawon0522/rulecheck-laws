@@ -2,7 +2,7 @@ name: 법령 원문 일일 재확인
 
 on:
   schedule:
-    - cron: "0 4 * * *"      # 한국시간 오후 1시 (PC가 켜져 있을 시간대)
+    - cron: "0 4 * * *"      # 한국시간 오후 1시
   workflow_dispatch:
 
 permissions:
@@ -20,27 +20,31 @@ jobs:
 
       - name: 접속 진단
         continue-on-error: true
-        shell: bash
         run: |
-          curl -sS -m 20 -o /tmp/a.json -w "status=%{http_code} time=%{time_total}s\n" "https://www.law.go.kr/DRF/lawSearch.do?OC=${{ secrets.LAW_OC }}&target=law&type=JSON&query=%EA%B7%BC%EB%A1%9C%EA%B8%B0%EC%A4%80%EB%B2%95" || echo "연결 실패"
-          head -c 300 /tmp/a.json ; echo
+          $u = "https://www.law.go.kr/DRF/lawSearch.do?OC=${{ secrets.LAW_OC }}&target=law&type=JSON&query=%EA%B7%BC%EB%A1%9C%EA%B8%B0%EC%A4%80%EB%B2%95"
+          try {
+            $r = Invoke-WebRequest -Uri $u -TimeoutSec 20 -UseBasicParsing
+            "status=$($r.StatusCode)"
+            $r.Content.Substring(0, [Math]::Min(300, $r.Content.Length))
+          } catch {
+            "연결 실패: $($_.Exception.Message)"
+          }
 
       - name: 조문 원문 재확인
-        shell: bash
         env:
           LAW_OC: ${{ secrets.LAW_OC }}
         run: node scripts/snapshot.mjs
 
       - name: 변경사항 커밋
         if: always()
-        shell: bash
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add public/snapshot.json || true
-          if git diff --staged --quiet; then
-            echo "변경 없음 — 커밋 생략"
-          else
-            git commit -m "법령 원문 재확인 $(date -u '+%Y-%m-%d')"
+          if (Test-Path public/snapshot.json) { git add public/snapshot.json }
+          $changed = git diff --staged --name-only
+          if (-not $changed) {
+            "변경 없음 - 커밋 생략"
+          } else {
+            git commit -m "법령 원문 재확인 $(Get-Date -Format yyyy-MM-dd)"
             git push
-          fi
+          }
