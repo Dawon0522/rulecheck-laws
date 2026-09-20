@@ -2,9 +2,8 @@ name: 법령 원문 일일 재확인
 
 on:
   schedule:
-    # 매일 한국시간 새벽 4시 (UTC 19:00 = 전날)
     - cron: "0 19 * * *"
-  workflow_dispatch:        # 수동 실행 버튼
+  workflow_dispatch:
 
 permissions:
   contents: write
@@ -18,6 +17,19 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: "20"
+
+      - name: 접속 진단
+        continue-on-error: true
+        run: |
+          URL="DRF/lawSearch.do?OC=${{ secrets.LAW_OC }}&target=law&type=JSON&query=%EA%B7%BC%EB%A1%9C%EA%B8%B0%EC%A4%80%EB%B2%95"
+          echo "--- DNS ---"
+          getent hosts www.law.go.kr || echo "DNS 실패"
+          echo "--- HTTPS ---"
+          curl -sS -m 20 -o /tmp/a.json -w "status=%{http_code} time=%{time_total}s\n" "https://www.law.go.kr/$URL" ; echo "exit=$?"
+          head -c 300 /tmp/a.json ; echo
+          echo "--- HTTP ---"
+          curl -sS -m 20 -o /tmp/b.json -w "status=%{http_code} time=%{time_total}s\n" "http://www.law.go.kr/$URL" ; echo "exit=$?"
+          head -c 300 /tmp/b.json ; echo
 
       - name: 조문 원문 재확인
         env:
